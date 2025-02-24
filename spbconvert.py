@@ -11,9 +11,10 @@
 #
 
 import sys
-
+from xml.sax.saxutils import escape
 
 def mywrite(f, str):
+    # str=escape(str)
     f.write("{0}\n".format(str))
 
 
@@ -29,9 +30,9 @@ def main():
 
     try:
         # Open input file in text mode with UTF-8 encoding
-        with open(sys.argv[1], 'r', encoding='windows-1251') as ifile:
+        with open(sys.argv[1], 'r', encoding='utf-16') as ifile:
             # Open output file in write mode
-            with open(sys.argv[2], 'w') as ofile:
+            with open(sys.argv[2], 'w', encoding='utf-8') as ofile:
 
                 FOLDER_NAME_TOKEN = 1
                 ENTRY_NAME_TOKEN = FOLDER_NAME_TOKEN + 1
@@ -54,6 +55,7 @@ def main():
 
                 for line in ifile:
                     line = line.strip('\r\n')
+                    line = escape(line)
                     if len(line) == 0:
                         # empty line
                         if valid_entry == False:
@@ -94,13 +96,13 @@ def main():
                         else:
                             valid_entry = True
                             if next_token == BEFORE_NOTES_TOKEN:
-                                if line.startswith('User Name:'):
+                                if line.startswith('User Name:') or line.startswith('Пользователь:'):
                                     user_name = line[len(
                                         'User Name:'):].strip(' ')
-                                elif line.startswith('Password:'):
+                                elif line.startswith('Password:') or line.startswith('Пароль:'):
                                     password = line[len(
                                         'Password:'):].strip(' ')
-                                elif line.startswith('Web Site:'):
+                                elif line.startswith('Web Site:') or line.startswith('Вебсайт:'):
                                     url = line[len('Web Site:'):].strip(' ')
                                 elif line.startswith('Notes:'):
                                     if notes == INVALID_VALUE:

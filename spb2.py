@@ -1,5 +1,5 @@
 import re
-
+from xml.sax.saxutils import escape
 
 def process_entry(entry_text):
     lines = entry_text.strip().split('\n')
@@ -53,17 +53,20 @@ def process_entry(entry_text):
 
 def main():
     try:
-        with open('input.txt', 'r', encoding='windows-1251') as infile, open('output.xml', 'wt', encoding='windows-1251') as outfile:
+        with open('input.txt', 'rt', encoding='utf-16') as infile, open('output.xml', 'wt', encoding='utf-8') as outfile:
             outfile.write(
-                '<?xml version="1.0" encoding="windows-1251" standalone="yes"?>\n')
+                '<?xml version="1.0" encoding="utf-8" standalone="yes"?>\n')
             outfile.write('<pwlist>\n')
 
             entry_text = ""
             for line in infile:
                 line = line.strip()
+                line = escape(line)
+                print(f"Processing line: {line}")  # Print the processed line (line)
                 if len(line) == 0:  # Empty line separates entries
                     group, title, username, password, url, notes = process_entry(
                         entry_text)
+                    print (f"Group: {group}, Title: {title}, Username: {username}, Password: {password}, URL: {url}, Notes: {notes}")
                     outfile.write(f'<pwentry>\n')
                     outfile.write(f'<group>{group}</group>\n')
                     outfile.write(f'<title>{title}</title>\n')
