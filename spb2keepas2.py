@@ -1,91 +1,124 @@
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
-import re
 
 def parse_input_file(filename):
     with open(filename, 'r', encoding='utf-16') as f:
-        content = f.read()
-    
-    groups = []
-    current_group = None
-    current_entry = None
-    entries = []
-    lines = content.split('\n')
-    
+        lines = f.readlines()
+
+    groups = []  # Список всех групп
+    group_stack = []  # Стек для вложенных групп
+    current_group = None  # Текущая группа
+    current_entry = None  # Текущая запись
+    notes_lines = []  # Буфер для строк Notes
+    is_notes = False  # Флаг, что мы находимся в блоке Notes
+
     for line in lines:
         line = line.strip()
+
+        # Обработка пустых строк
         if not line:
-            if current_entry:
-                if notes:
-                    current_entry['fields']['Notes'] = '\n'.join(notes)
-                    notes = []
-                entries.append(current_entry)
+            if is_notes:
+                # Если это конец Notes, добавляем их в запись
+                current_entry['fields']['Notes'] = '\n'.join(notes_lines)
+                notes_lines = []
+                is_notes = False
+            elif current_entry:
+                # Если это конец записи, добавляем её в текущую группу
+                current_group['entries'].append(current_entry)
                 current_entry = None
+            elif current_group:
+                # Если это конец группы, добавляем её в родительскую группу
+                if group_stack:
+                    parent_group = group_stack[-1]
+                    parent_group['groups'].append(current_group)
+                    current_group = None
+                else:
+                    groups.append(current_group)
+                    current_group = None
             continue
-        
-        # if re.match(r'^[А-ЯЁ][а-яё ]+$', line) and not current_entry and not current_group:
-        if re.match(r'^[^:]+$', line) and not current_entry and not current_group:
-            if current_group:
-                groups.append(current_group)
-            current_group = {'name': line, 'entries': []}
-            entries = []
-            continue
-        
-        if not current_group:
-            continue
-        
-        if not current_entry:
-            current_entry = {'title': line, 'fields': {}}
-            notes = []
-        else:
-            if ': ' in line:
-                key, val = line.split(': ', 1)
-                current_entry['fields'][key] = val
+
+        # Обработка новой группы
+        if not current_group and not current_entry:
+            if group_stack:
+                # Если есть родительская группа, добавляем текущую группу в неё
+                parent_group = group_stack[-1]
+                parent_group['groups'].append({'name': line, 'groups': [], 'entries': []})
+                current_group = parent_group['groups'][-1]
             else:
-                notes.append(line)
-    
+                # Иначе создаем новую группу
+                current_group = {'name': line, 'groups': [], 'entries': []}
+                group_stack.append(current_group)
+            continue
+
+        # Обработка новой записи
+        if not current_entry and ':' not in line:
+            current_entry = {'title': line, 'fields': {}}
+            continue
+
+        # Обработка строк с ключами
+        if ':' in line:
+            if is_notes:
+                notes_lines.append(line)
+            else:
+                key, value = line.split(':', 1)
+                key = key.strip()
+                value = value.strip()
+
+                if key == 'Notes':
+                    is_notes = True
+                else:
+                    current_entry['fields'][key] = value
+            continue
+
+    # Добавляем последнюю запись и группу, если они есть
     if current_entry:
-        if notes:
-            current_entry['fields']['Notes'] = '\n'.join(notes)
-        entries.append(current_entry)
+        if notes_lines:
+            current_entry['fields']['Notes'] = '\n'.join(notes_lines)
+        current_group['entries'].append(current_entry)
     if current_group:
-        current_group['entries'] = entries
-        groups.append(current_group)
-    
+        if group_stack:
+            parent_group = group_stack[-1]
+            parent_group['groups'].append(current_group)
+        else:
+            groups.append(current_group)
+
     return groups
 
-def create_kp_xml(groups):
-    root = ET.Element('KeePassFile')
-    root_group = ET.SubElement(ET.SubElement(root, 'Root'), 'Group')
-    ET.SubElement(root_group, 'Name').text = 'Root'
-    
+def create_kp_xml(groups, parent_group_elem=None):
+    if parent_group_elem is None:
+        root = ET.Element('KeePassFile')
+        meta = ET.SubElement(root, 'Meta')
+        ET.SubElement(meta, 'Generator').text = 'KeePass2 XML Generator'
+        root_group = ET.SubElement(ET.SubElement(root, 'Root'), 'Group')
+        ET.SubElement(root_group, 'Name').text = 'Root'
+        parent_group_elem = root_group
+
     for group in groups:
-        group_elem = ET.SubElement(root_group, 'Group')
+        group_elem = ET.SubElement(parent_group_elem, 'Group')
         ET.SubElement(group_elem, 'Name').text = group['name']
-        
+
+        # Обработка записей
         for entry in group['entries']:
             entry_elem = ET.SubElement(group_elem, 'Entry')
-            
-            # Title field
-            title = entry['title']
-            string_elem = ET.SubElement(entry_elem, 'String')
-            ET.SubElement(string_elem, 'Key').text = 'Title'
-            ET.SubElement(string_elem, 'Value').text = title
-            
-            # Other fields
-            fields = entry['fields']
-            for key, value in fields.items():
+            ET.SubElement(entry_elem, 'Key').text = 'Title'
+            ET.SubElement(entry_elem, 'Value').text = entry['title']
+
+            for key, value in entry['fields'].items():
                 string_elem = ET.SubElement(entry_elem, 'String')
                 ET.SubElement(string_elem, 'Key').text = key
                 ET.SubElement(string_elem, 'Value').text = value
-    
-    return root
+
+        # Рекурсивная обработка вложенных групп
+        if group['groups']:
+            create_kp_xml(group['groups'], group_elem)
+
+    return parent_group_elem
 
 def save_xml(xml_root, filename):
     xml_str = ET.tostring(xml_root, encoding='utf-8')
     dom = minidom.parseString(xml_str)
     pretty_xml = dom.toprettyxml(indent='  ', encoding='utf-8').decode('utf-8')
-    
+
     with open(filename, 'w', encoding='utf-8') as f:
         f.write(pretty_xml)
 
