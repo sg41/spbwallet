@@ -1,5 +1,6 @@
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
+import re
 
 def parse_input_file(filename):
     with open(filename, 'r', encoding='utf-16') as f:
@@ -11,8 +12,11 @@ def parse_input_file(filename):
     current_entry = None  # Текущая запись
     notes_lines = []  # Буфер для строк Notes
     is_notes = False  # Флаг, что мы находимся в блоке Notes
-
+    notes_count = 0
+    position = 0
+    before_line = None
     for line in lines:
+        position += len(line)
         line = line.strip()
 
         # Обработка пустых строк
@@ -22,67 +26,88 @@ def parse_input_file(filename):
                 current_entry['fields']['Notes'] = '\n'.join(notes_lines)
                 notes_lines = []
                 is_notes = False
+                current_group['entries'].append(current_entry)
+                current_entry = None
             elif current_entry:
                 # Если это конец записи, добавляем её в текущую группу
                 current_group['entries'].append(current_entry)
                 current_entry = None
-            elif current_group:
+            elif before_line:
+                if group_stack:
+                    # Если есть родительская группа, добавляем текущую группу в неё
+                    parent_group = current_group
+                    parent_group['groups'].append({'name': before_line, 'groups': [], 'entries': []})
+                    current_group = parent_group['groups'][-1]
+                else:
+                    # Иначе создаем новую группу
+                    current_group = {'name': before_line, 'groups': [], 'entries': []}
+                    group_stack.append(current_group)
+                # continue
+            else:
                 # Если это конец группы, добавляем её в родительскую группу
                 if group_stack:
-                    parent_group = group_stack[-1]
-                    parent_group['groups'].append(current_group)
-                    current_group = None
-                else:
-                    groups.append(current_group)
-                    current_group = None
-            continue
+                    # parent_group = group_stack[-1]
+                    # parent_group['groups'].append(current_group)
+                    # current_group = None
+                    current_group = parent_group
+                # else:
+                #     groups.append(current_group)
+                #     current_group = None
+            # continue
 
         # Обработка новой группы
-        if not current_group and not current_entry:
-            if group_stack:
-                # Если есть родительская группа, добавляем текущую группу в неё
-                parent_group = group_stack[-1]
-                parent_group['groups'].append({'name': line, 'groups': [], 'entries': []})
-                current_group = parent_group['groups'][-1]
-            else:
-                # Иначе создаем новую группу
-                current_group = {'name': line, 'groups': [], 'entries': []}
-                group_stack.append(current_group)
-            continue
+        # if not current_entry:
+        #     if group_stack:
+        #         # Если есть родительская группа, добавляем текущую группу в неё
+        #         parent_group = group_stack[-1]
+        #         parent_group['groups'].append({'name': line, 'groups': [], 'entries': []})
+        #         current_group = parent_group['groups'][-1]
+        #     else:
+        #         # Иначе создаем новую группу
+        #         current_group = {'name': line, 'groups': [], 'entries': []}
+        #         group_stack.append(current_group)
+        #     continue
 
         # Обработка новой записи
-        if not current_entry and ':' not in line:
-            current_entry = {'title': line, 'fields': {}}
-            continue
-
-        # Обработка строк с ключами
-        if ':' in line:
+        else:
             if is_notes:
                 notes_lines.append(line)
+                # continue
             else:
-                key, value = line.split(':', 1)
-                key = key.strip()
-                value = value.strip()
+            # Обработка строк с ключами
+                if ':' in line:
+                    if not current_entry :
+                        current_entry = {'title': before_line, 'fields': {}}
+                    
+                    else:
+                        key, value = line.split(':', 1)
+                        key = key.strip()
+                        value = value.strip()
 
-                if key == 'Notes':
-                    is_notes = True
-                else:
-                    current_entry['fields'][key] = value
-            continue
+                        if key == 'Notes':
+                            is_notes = True
+                            match = re.match(r'(\n\n^[^:\n]+\n.+:\s.+)|(\n\n\n^[^:\n]+\n\n)',  lines[position:])
+                            if match:
+                                notes_end=match.start()+1
+                        else:
+                            current_entry['fields'][key] = value
+                    # continue
+
+        before_line = line
 
     # Добавляем последнюю запись и группу, если они есть
-    if current_entry:
-        if notes_lines:
-            current_entry['fields']['Notes'] = '\n'.join(notes_lines)
-        current_group['entries'].append(current_entry)
-    if current_group:
-        if group_stack:
-            parent_group = group_stack[-1]
-            parent_group['groups'].append(current_group)
-        else:
-            groups.append(current_group)
+    # if current_entry:
+    #     if notes_lines:
+    #         current_entry['fields']['Notes'] = '\n'.join(notes_lines)
+    #     current_group['entries'].append(current_entry)
+    # if current_group:
+    #     if group_stack:
+    #         parent_group = group_stack[-1]
+    #         parent_group['groups'].append(current_group)
+    #     else:
+    #         groups.append(current_group)
 
-    return groups
+    return group_stack
 
 def create_kp_xml(groups, parent_group_elem=None):
     if parent_group_elem is None:
