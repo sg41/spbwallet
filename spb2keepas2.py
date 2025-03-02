@@ -43,38 +43,38 @@ def parse_input_file(filename):
                             # Иначе создаем новую группу
                             current_group = {'name': before_line, 'groups': [], 'entries': []}
                             group_stack.append(current_group)
+                        # continue
                     else:
                         # Если это конец группы, добавляем её в родительскую группу
                         if group_stack:
                             current_group = parent_group
+
+                # Обработка новой записи
                 else:
                     # Обработка строк с ключами
-                    if ':' in line:
+                        if ':' in line:
+                            if not current_entry :
+                                current_entry = {'title': before_line, 'fields': {}}
+                            # else:
+                            key, value = line.split(':', 1)
+                            key = key.strip()
+                            value = value.strip()
 
-                        if not current_entry :
-                            current_entry = {'title': before_line, 'fields': {}}
-
-                        key, value = line.split(':', 1)
-                        key = key.strip()
-                        value = value.strip()
-
-                        if key == 'Notes':
-                            is_notes = True
-                            notes_lines.append(value)
-                            
-                            rest_of_the_file = ''.join(lines[line_index:])
-                            match = re.search(r'(\n\n+^[^:\n]+\n.+:\s.+)|(\n\n\n+^[^:\n]+\n\n)',  rest_of_the_file, re.MULTILINE)
-                            if match:
-                                notes_end=match.start()+1
-                                notes_line_count = match.string[:notes_end].count('\n')-1
-                                if lines[line_index+notes_line_count] == '\n':
-                                    notes_line_count -= 1
-                        else:
-                            current_entry['fields'][key] = value
+                            if key == 'Notes':
+                                is_notes = True
+                                notes_lines.append(value)
+                                
+                                rest_of_the_file = ''.join(lines[line_index:])
+                                match = re.search(r'(\n\n^[^:\n]+\n.+:\s.+)|(\n\n\n^[^:\n]+\n\n)',  rest_of_the_file, re.MULTILINE)
+                                if match:
+                                    notes_end=match.start()+1
+                                    notes_line_count = match.string[:notes_end].count('\n')-1
+                            else:
+                                current_entry['fields'][key] = value
         else: 
             notes_lines.append(line)
             notes_line_count -= 1
-
+            
         line_index += 1
         before_line = line
 
