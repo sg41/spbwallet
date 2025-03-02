@@ -2,6 +2,17 @@ import xml.etree.ElementTree as ET
 from xml.dom import minidom
 import re
 
+def translate_key(key):
+    translations = {
+        'Пользователь': 'UserName',
+        'User Name': 'UserName',
+        'Пароль': 'Password',
+        'Вебсайт': 'URL',
+        'Сайт': 'URL',
+        'Web Site': 'URL',
+    }
+    return translations.get(key, key)
+
 def parse_input_file(filename):
     with open(filename, 'r', encoding='utf-16') as f:
         lines = f.readlines()
@@ -70,7 +81,7 @@ def parse_input_file(filename):
                                     notes_end=match.start()+1
                                     notes_line_count = match.string[:notes_end].count('\n')-1
                             else:
-                                current_entry['fields'][key] = value
+                                current_entry['fields'][translate_key(key)] = value
         else: 
             notes_lines.append(line)
             notes_line_count -= 1
